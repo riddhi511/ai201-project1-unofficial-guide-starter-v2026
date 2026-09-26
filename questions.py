@@ -22,9 +22,14 @@ QUESTIONS = [
 ]
 
 OUT_OF_SCOPE = [
-    {"question": "What is the best restaurant in Paris?"},
-    {"question": "How do I file federal taxes?"},
-    {"question": "Who won the 2024 World Cup?"},
-    {"question": "What is the speed of light?"},
-    {"question": "How do I train a neural network?"},
+    "What is the best restaurant in Paris?",
+    "How do I file federal taxes?",
+    "Who won the 2024 World Cup?",
+    "What is the speed of light?",
+    "How do I train a neural network?",
 ]
+
+
+def answered():
+    """Return questions that have both a question and an expects field."""
+    return [q for q in QUESTIONS if q.get("question") and q.get("expects")]
