@@ -185,9 +185,8 @@ def search(
     variant: str = "default",
 ) -> list[Result]:
     """
-    Retrieve the chunks closest in meaning to a question.
-
-    Returns them nearest-first, each with its distance.
+    Hybrid search: combines semantic (cosine) and keyword (BM25) search.
+    Returns chunks nearest-first by combined score.
     """
     top_k = top_k or config.TOP_K
     name = config.collection_name(corpus, variant)
@@ -199,15 +198,51 @@ def search(
             f"No index called '{name}'. Run `python app.py index` first."
         ) from exc
 
+    # --- Semantic search ---
+    fetch_k = min(top_k * 3, collection.count())
     raw = collection.query(
         query_embeddings=embed([question]),
-        n_results=min(top_k, collection.count()),
+        n_results=fetch_k,
     )
 
+    all_texts = raw["documents"][0]
+    all_metas = raw["metadatas"][0]
+    all_distances = raw["distances"][0]
+
+    # --- BM25 keyword search ---
+    try:
+        from rank_bm25 import BM25Okapi
+
+        tokenized_corpus = [t.lower().split() for t in all_texts]
+        bm25 = BM25Okapi(tokenized_corpus)
+        tokenized_query = question.lower().split()
+        bm25_scores = bm25.get_scores(tokenized_query)
+
+        # Normalize BM25 scores to 0-1
+        max_bm25 = max(bm25_scores) if max(bm25_scores) > 0 else 1
+        bm25_norm = [s / max_bm25 for s in bm25_scores]
+
+        # Normalize semantic distances to 0-1 (lower = better, so invert)
+        max_dist = max(all_distances) if max(all_distances) > 0 else 1
+        sem_norm = [1 - (d / max_dist) for d in all_distances]
+
+        # Combine: 60% semantic, 40% keyword
+        combined = [0.6 * s + 0.4 * b for s, b in zip(sem_norm, bm25_norm)]
+
+        # Sort by combined score descending
+        ranked = sorted(
+            zip(all_texts, all_metas, all_distances, combined),
+            key=lambda x: x[3],
+            reverse=True,
+        )[:top_k]
+
+    except ImportError:
+        # Fall back to semantic only if rank_bm25 not installed
+        ranked = list(zip(all_texts, all_metas, all_distances,
+                         [0] * len(all_texts)))[:top_k]
+
     results: list[Result] = []
-    for text, meta, distance in zip(
-        raw["documents"][0], raw["metadatas"][0], raw["distances"][0]
-    ):
+    for text, meta, distance, _ in ranked:
         results.append(
             Result(
                 text=text,

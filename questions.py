@@ -16,8 +16,8 @@ QUESTIONS = [
         "expects": "permit"
     },
     {
-        "question": "What happens if you miss course registration?",
-        "expects": "registration"
+        "question": "When should you book an adviser appointment for registration?",
+        "expects": "two weeks"
     },
 ]
 
